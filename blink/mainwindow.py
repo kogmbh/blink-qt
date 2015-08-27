@@ -37,6 +37,8 @@ from blink.resources import ApplicationData, IconManager, Resources
 from blink.util import run_in_gui_thread
 from blink.widgets.buttons import AccountState, SwitchViewButton
 
+from blink.documentsharing.window import DocumentsWindow
+
 
 ui_class, base_class = uic.loadUiType(Resources.get('blink.ui'))
 
@@ -56,6 +58,7 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, name='BlinkSessionDidReinitializeForOutgoing')
         notification_center.add_observer(self, name='BlinkFileTransferNewIncoming')
         notification_center.add_observer(self, name='BlinkFileTransferNewOutgoing')
+        notification_center.add_observer(self, name='DocumentSharingFileTransferCompleted')
         notification_center.add_observer(self, sender=AccountManager())
 
         icon_manager = IconManager()
@@ -132,6 +135,8 @@ class MainWindow(base_class, ui_class):
         self.preferences_window = PreferencesWindow(self.account_model, None)
         self.server_tools_window = ServerToolsWindow(self.server_tools_account_model, None)
 
+        self.documents_window = DocumentsWindow()
+
         # Signals
         self.account_state.stateChanged.connect(self._SH_AccountStateChanged)
         self.account_state.clicked.connect(self._SH_AccountStateClicked)
@@ -141,6 +146,7 @@ class MainWindow(base_class, ui_class):
         self.audio_call_button.clicked.connect(self._SH_AudioCallButtonClicked)
         self.video_call_button.clicked.connect(self._SH_VideoCallButtonClicked)
         self.chat_session_button.clicked.connect(self._SH_ChatSessionButtonClicked)
+        self.share_document_button.clicked.connect(self._SH_ShareDocumentButtonClicked)
         self.back_to_contacts_button.clicked.connect(self.search_box.clear) # this can be set in designer -Dan
         self.conference_button.makeConference.connect(self._SH_MakeConference)
         self.conference_button.breakConference.connect(self._SH_BreakConference)
@@ -208,6 +214,7 @@ class MainWindow(base_class, ui_class):
         self.logs_window_action.triggered.connect(self._AH_LogsWindowActionTriggered)
         self.received_files_window_action.triggered.connect(self._AH_ReceivedFilesWindowActionTriggered)
         self.screenshots_window_action.triggered.connect(self._AH_ScreenshotsWindowActionTriggered)
+        self.documents_window_action.triggered.connect(self._AH_DocumentsWindowActionTriggered)
 
     def setupUi(self):
         super(MainWindow, self).setupUi(self)
@@ -262,6 +269,7 @@ class MainWindow(base_class, ui_class):
         self.video_call_button.setEnabled(enabled)
         self.chat_session_button.setEnabled(enabled)
         self.screen_sharing_button.setEnabled(enabled)
+        self.share_document_button.setEnabled(enabled)
 
     def load_audio_devices(self):
         settings = SIPSimpleSettings()
@@ -427,6 +435,9 @@ class MainWindow(base_class, ui_class):
         makedirs(directory)
         QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
 
+    def _AH_DocumentsWindowActionTriggered(self, checked):
+        self.documents_window.show()
+
     def _AH_VoicemailActionTriggered(self, action, checked):
         account = action.data()
         contact, contact_uri = URIUtils.find_contact(account.voicemail_uri, display_name='Voicemail')
@@ -578,6 +589,23 @@ class MainWindow(base_class, ui_class):
                 contact, contact_uri = URIUtils.find_contact(self.search_box.text())
             session_manager = SessionManager()
             session_manager.create_session(contact, contact_uri, [StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
+
+    def _SH_ShareDocumentButtonClicked(self):
+        list_view = self.contact_list if self.contacts_view.currentWidget() is self.contact_list_panel else self.search_list
+
+        selected_indexes = list_view.selectionModel().selectedIndexes()
+        if selected_indexes:
+            contact = selected_indexes[0].data(Qt.UserRole)
+            contact_uri = contact.uri
+        else:
+            contact, contact_uri = URIUtils.find_contact(self.search_box.text())
+
+        filename = QFileDialog.getOpenFileName(self, "Share a Document", "", "OpenDocument Files (*.odt)")
+
+        if filename:
+            session_manager = SessionManager()
+            session_manager.create_session(contact, contact_uri, [StreamDescription('document-sharing', filename=filename)])
+
 
     def _SH_BreakConference(self):
         active_session = self.session_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
@@ -914,5 +942,3 @@ class MainWindow(base_class, ui_class):
         self.filetransfer_window.show(activate=QApplication.activeWindow() is not None)
 
 del ui_class, base_class
-
-

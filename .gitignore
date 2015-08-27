@@ -1,0 +1,5 @@
+*kdev*
+build
+inst
+*.pyc
+_darcs

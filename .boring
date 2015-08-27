@@ -11,7 +11,12 @@
 
 (^|/)\.idea($|/)
 (^|/)\.komodotools($|/)
+(^|/)\.kdev4($|/)
+(^|/).+\.kdev4$
+(^|/)\.directory$
 (^|/)_darcs($|/)
+^\.git($|/)
+^\.gitignore$
 
 ^MANIFEST$
 ^build($|/)

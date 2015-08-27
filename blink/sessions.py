@@ -191,14 +191,27 @@ class ScreenSharingStreamInfo(MSRPStreamInfo):
             self.mode = stream.handler.type
 
 
+class DocumentSharingStreamInfo(MSRPStreamInfo):
+    def __init__(self):
+        super(DocumentSharingStreamInfo, self).__init__()
+        self.mode = None
+
+    def _update(self, stream):
+        super(DocumentSharingStreamInfo, self)._update(stream)
+        if stream is not None:
+            self.mode = stream.mode
+
+
+
 class StreamsInfo(object):
-    __slots__ = 'audio', 'video', 'chat', 'screen_sharing'
+    __slots__ = 'audio', 'video', 'chat', 'screen_sharing', 'document_sharing'
 
     def __init__(self):
         self.audio = AudioStreamInfo()
         self.video = VideoStreamInfo()
         self.chat = ChatStreamInfo()
         self.screen_sharing = ScreenSharingStreamInfo()
+        self.document_sharing = DocumentSharingStreamInfo()
 
     def __getitem__(self, key):
         key = key.replace('-', '_')
@@ -212,6 +225,7 @@ class StreamsInfo(object):
         self.video._update(streams.get('video'))
         self.chat._update(streams.get('chat'))
         self.screen_sharing._update(streams.get('screen-sharing'))
+        self.document_sharing._update(streams.get('document-sharing'))
 
 
 class SessionInfo(object):
@@ -4796,7 +4810,7 @@ class IncomingDialog(base_class, ui_class):
 
     @property
     def streams(self):
-        return (self.audio_stream, self.chat_stream, self.screensharing_stream, self.video_stream)
+        return (self.audio_stream, self.chat_stream, self.screensharing_stream, self.video_stream, self.documentsharing_stream)
 
     @property
     def accepted_streams(self):
@@ -4820,12 +4834,14 @@ class IncomingDialog(base_class, ui_class):
             self.chat_stream.active = True
             self.screensharing_stream.active = True
             self.video_stream.active = True
+            self.documentsharing_stream.active = True
             self.note_label.setText(u'To refuse a stream click its icon')
         else:
             self.audio_stream.active = False
             self.chat_stream.active = False
             self.screensharing_stream.active = False
             self.video_stream.active = False
+            self.documentsharing_stream.active = False
             if self.audio_stream.in_use:
                 self.note_label.setText(u'Audio call')
             elif self.chat_stream.in_use:
@@ -4834,6 +4850,8 @@ class IncomingDialog(base_class, ui_class):
                 self.note_label.setText(u'Video call')
             elif self.screensharing_stream.in_use:
                 self.note_label.setText(u'Screen sharing request')
+            elif self.documentsharing_stream.in_use:
+                self.note_label.setText(u'Document sharing request')
             else:
                 self.note_label.setText(u'')
         self._update_accept_button()
@@ -4845,7 +4863,7 @@ class IncomingRequest(QObject):
     accepted = pyqtSignal(object)
     rejected = pyqtSignal(object, str)
 
-    def __init__(self, dialog, session, contact, contact_uri, proposal=False, audio_stream=None, video_stream=None, chat_stream=None, screensharing_stream=None):
+    def __init__(self, dialog, session, contact, contact_uri, proposal=False, audio_stream=None, video_stream=None, chat_stream=None, screensharing_stream=None, documentsharing_stream=None):
         super(IncomingRequest, self).__init__()
         self.dialog = dialog
         self.session = session
@@ -4856,6 +4874,7 @@ class IncomingRequest(QObject):
         self.video_stream = video_stream
         self.chat_stream = chat_stream
         self.screensharing_stream = screensharing_stream
+        self.documentsharing_stream = documentsharing_stream
 
         if proposal:
             self.dialog.setWindowTitle(u'Incoming Session Update')
@@ -4882,6 +4901,8 @@ class IncomingRequest(QObject):
                 self.dialog.screensharing_label.setText(u'is asking to share your screen')
                 #self.dialog.screensharing_stream.accepted = True if proposal else False
             self.dialog.screensharing_stream.show()
+        if self.documentsharing_stream:
+            self.dialog.documentsharing_stream.show()
         self.dialog.audio_device_label.setText(u'Selected audio device is: %s' % SIPApplication.voice_audio_bridge.mixer.real_output_device)
 
         self.dialog.accepted.connect(self._SH_DialogAccepted)
@@ -4916,6 +4937,8 @@ class IncomingRequest(QObject):
             streams.append(self.chat_stream)
         if self.screensharing_accepted:
             streams.append(self.screensharing_stream)
+        if self.documentsharing_accepted:
+            streams.append(self.documentsharing_stream)
         return streams
 
     @property
@@ -4935,6 +4958,10 @@ class IncomingRequest(QObject):
         return self.dialog.screensharing_stream.in_use and self.dialog.screensharing_stream.accepted
 
     @property
+    def documentsharing_accepted(self):
+        return self.dialog.documentsharing_stream.in_use and self.dialog.documentsharing_stream.accepted
+
+    @property
     def priority(self):
         if self.audio_stream:
             return 0
@@ -4944,12 +4971,14 @@ class IncomingRequest(QObject):
             return 2
         elif self.chat_stream:
             return 3
+        elif self.documentsharing_stream:
+            return 4
         else:
             return sys.maxint
 
     @property
     def stream_types(self):
-        return {stream.type for stream in (self.audio_stream, self.video_stream, self.screensharing_stream, self.chat_stream) if stream is not None}
+        return {stream.type for stream in (self.audio_stream, self.video_stream, self.screensharing_stream, self.chat_stream, self.documentsharing_stream) if stream is not None}
 
     def _SH_DialogAccepted(self):
         self.accepted.emit(self)
@@ -5337,9 +5366,10 @@ class SessionManager(object):
         video_stream = proposed_streams.get('video')
         chat_stream = proposed_streams.get('chat')
         screensharing_stream = proposed_streams.get('screen-sharing')
+        documentsharing_stream = proposed_streams.get('document-sharing')
 
         dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
-        incoming_request = IncomingRequest(dialog, sip_session, contact, contact_uri, proposal=True, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
+        incoming_request = IncomingRequest(dialog, sip_session, contact, contact_uri, proposal=True, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream, documentsharing_stream=documentsharing_stream)
         bisect.insort_right(self.incoming_requests, incoming_request)
         incoming_request.accepted.connect(self._SH_IncomingRequestAccepted)
         incoming_request.rejected.connect(self._SH_IncomingRequestRejected)
@@ -5416,14 +5446,15 @@ class SessionManager(object):
         chat_streams = stream_map['chat']
         screensharing_streams = stream_map['screen-sharing']
         filetransfer_streams = [stream for stream in stream_map['file-transfer'] if stream.direction == 'recvonly']    # Only accept receiving files
+        documentsharing_streams = stream_map['document-sharing']
 
-        if not audio_streams and not video_streams and not chat_streams and not screensharing_streams and not filetransfer_streams:
+        if not audio_streams and not video_streams and not chat_streams and not screensharing_streams and not filetransfer_streams and not documentsharing_streams:
             session.reject(488)
             return
 
         contact, contact_uri = URIUtils.find_contact(session.remote_identity.uri, display_name=session.remote_identity.display_name, exact=False)
 
-        if filetransfer_streams and not (audio_streams or video_streams or chat_streams or screensharing_streams):
+        if filetransfer_streams and not (audio_streams or video_streams or chat_streams or screensharing_streams or documentsharing_streams):
             dialog = IncomingFileTransferDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
             incoming_request = IncomingFileTransferRequest(dialog, contact, contact_uri, session, filetransfer_streams[0])
             incoming_request.accepted.connect(self._SH_IncomingFileTransferRequestAccepted)
@@ -5433,10 +5464,11 @@ class SessionManager(object):
             video_stream = video_streams[0] if video_streams else None
             chat_stream = chat_streams[0] if chat_streams else None
             screensharing_stream = screensharing_streams[0] if screensharing_streams else None
+            documentsharing_stream = documentsharing_streams[0] if documentsharing_streams else None
 
             settings = SIPSimpleSettings()
 
-            if chat_stream and not (audio_stream or video_stream or screensharing_stream) and contact.type != 'dummy' and settings.chat.auto_accept:
+            if chat_stream and not (audio_stream or video_stream or screensharing_stream or documentsharing_stream) and contact.type != 'dummy' and settings.chat.auto_accept:
                 try:
                     blink_session = next(session for session in self.sessions if session.reusable and session.contact.settings is contact.settings)
                     reinitialize = True
@@ -5448,7 +5480,7 @@ class SessionManager(object):
                 return
 
             dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
-            incoming_request = IncomingRequest(dialog, session, contact, contact_uri, proposal=False, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
+            incoming_request = IncomingRequest(dialog, session, contact, contact_uri, proposal=False, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream, documentsharing_stream = documentsharing_stream)
             incoming_request.accepted.connect(self._SH_IncomingRequestAccepted)
             incoming_request.rejected.connect(self._SH_IncomingRequestRejected)
         bisect.insort_right(self.incoming_requests, incoming_request)

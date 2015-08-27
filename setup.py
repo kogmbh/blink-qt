@@ -17,7 +17,7 @@ def find_packages(toplevel):
     return [directory.replace(os.path.sep, '.') for directory, subdirs, files in os.walk(toplevel) if '__init__.py' in files]
 
 def list_resources(directory, destination_directory):
-    return [(dir.replace(directory, destination_directory), [os.path.join(dir, file) for file in files]) for dir, subdirs, files in os.walk(directory)]
+    return [(dir.replace(directory, destination_directory, 1), [os.path.join(dir, file) for file in files]) for dir, subdirs, files in os.walk(directory)]
 
 setup(name         = "blink",
       version      = get_version(),

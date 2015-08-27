@@ -757,6 +757,20 @@ padding: 2px;</string>
               </property>
              </widget>
             </item>
+            <item>
+             <widget class="QToolButton" name="share_document_button">
+              <property name="toolTip">
+               <string>Share Document</string>
+              </property>
+              <property name="text">
+               <string>...</string>
+              </property>
+              <property name="icon">
+               <iconset>
+                <normaloff>icons/file-transfer.png</normaloff>icons/file-transfer.png</iconset>
+              </property>
+             </widget>
+            </item>
            </layout>
           </item>
           <item>
@@ -960,7 +974,7 @@ padding: 2px;</string>
      <x>0</x>
      <y>0</y>
      <width>285</width>
-     <height>20</height>
+     <height>26</height>
     </rect>
    </property>
    <widget class="QMenu" name="blink_menu">
@@ -1089,6 +1103,7 @@ padding: 2px;</string>
     <addaction name="logs_window_action"/>
     <addaction name="received_files_window_action"/>
     <addaction name="screenshots_window_action"/>
+    <addaction name="documents_window_action"/>
    </widget>
    <addaction name="blink_menu"/>
    <addaction name="call_menu"/>
@@ -1328,6 +1343,11 @@ padding: 2px;</string>
    </property>
    <property name="shortcutContext">
     <enum>Qt::ApplicationShortcut</enum>
+   </property>
+  </action>
+  <action name="documents_window_action">
+   <property name="text">
+    <string>Documents</string>
    </property>
   </action>
  </widget>

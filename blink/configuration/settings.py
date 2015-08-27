@@ -110,6 +110,16 @@ class BlinkScreenSharingSettings(SettingsGroup):
     open_viewonly = Setting(type=bool, default=False)
 
 
+class DocumentsWindowSettings(SettingsGroup):
+    session_info = SessionInfoSettings
+
+    style = Setting(type=str, default='Stockholm')
+    style_variant = Setting(type=str, default=None, nillable=True)
+    show_user_icons = Setting(type=bool, default=True)
+    font = Setting(type=str, default=None, nillable=True)
+    font_size = Setting(type=int, default=None, nillable=True)
+
+
 class BlinkPresenceSettings(SettingsGroup):
     current_state = Setting(type=PresenceState, default=PresenceState('Available'))
     state_history = Setting(type=PresenceStateList, default=PresenceStateList())
@@ -121,6 +131,7 @@ class BlinkSettings(SettingsObject):
     __id__ = 'BlinkSettings'
 
     chat_window = ChatWindowSettings
+    documents_window = DocumentsWindowSettings
     presence = BlinkPresenceSettings
     screen_sharing = BlinkScreenSharingSettings
 

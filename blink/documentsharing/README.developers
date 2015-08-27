@@ -1,0 +1,160 @@
+# README for developers
+
+The concept of document collaboration does not really match the current UI concept
+of Blink, where P2P sessions are bound to connection lifetime. If a connection
+fails (due to connection problems), the session is ended. This is not a real
+problem with audio and video sessions, because the state of the session (things
+that have been talked about or shown) is in the head of the people.
+For chats the old chat log/room can be reused for a new session, but only if
+locally the chat log/room has not been closed/deleted yet. 
+With shared screens the shared object is outside of Blink and thus its state,
+so nothing Blink needs to care about.
+
+If a connection fails during a document-sharing session, it would be favourable
+if all participants do not lose the currently shared document, but instead
+could continue reading and even editing it. And once connection is possible
+again, any changes done meanwhile by all participants should be synchronized on
+a reconnection.
+
+
+## Current state
+
+For now the implementation supports 1:1 collaboration, with one host and
+one guest. The collaboration is done using an own meta-session, which
+internally reuses a BlinkSession object, which holds the currently used
+stream, if there is one. This meta-session is represented by an instance of
+`DocumentSharingSessionItem` (in "blink/documentsharing/window.py"), which
+holds most objects that belong to a document-sharing session. 
+
+Both host and guest can disconnect from a running document-sharing session. A
+disconnect can also happen if the connection fails. While being disconnected
+both host and guest can continue editing and reading the document.
+
+Both host and guest can request a reconnect for a running document-sharing
+session. If the guest has already closed the document, it will be reopened
+once the SIP session has been accepted. If the host has already closed the
+document, the reconnection will be aborted with an error message. (Future
+implementation might want to support recreation of the session at the host)
+If both host and guest still have the document open, the reconnect will
+result in an automatic synchronisation of all changes that have been done
+while being disconnected.
+
+While a connection exists for a running document-sharing session, all changes
+are automatically synchronized between host and guest. If there is no
+connection and changes have been made at the guest, when the guest tries to
+close the shared document they are warned about losing their changes.
+If the host tries to close the shared document, they are warned about losing
+any changes if the document was changed since the last time it was saved to
+the filesystem.
+
+Sharing a document can be triggered from similar places like e.g. screen
+sharing, the action is triggered for a given contact. All places follow the
+same pattern: After picking a file from the local filesystem, the Blink
+SessionManager is asked to create a session with a "document-sharing" stream:
+
+    SessionManager().create_session(contact, contact_uri,
+                                    [StreamDescription('document-sharing', filename=filename)])
+
+This triggers the usual SIP logic, which might end or not with a SIP session
+with a document-sharing stream both at host and guest.
+
+`DocumentSharingSessionModel` listens for all `MediaStreamDidInitialize` events
+and if there is a 'document-sharing' stream, it will create a new
+`DocumentSharingSessionItem`, which from now on manages the document-sharing
+session, both at host and guest client.
+
+
+## How does it work
+
+The engine behind the scene is [WebODF](http://webodf.org), a JavaScript
+Document Engine using only HTML5 technologies. It provides the editor
+functionality, including the general syncing logic for collaborative editing.
+The current implementation of the document-sharing uses Wodo.CollabTextEditor,
+an easy-to-use component made with WebODF. It has a more simple API and e.g.
+provides a toolbar out-of-the-box.
+(Future implementations might want to make direct use of the WebODF library
+and e.g. use a non-HTML, native toolbar for the editor and other customized
+things)
+
+To embed the editor, Wodo.CollabTextEditor is run inside a Web component
+(`QWebView`), with all the files of Wodo.CollabTextEditor stored in
+"resources/documentsharing" and any requests from the Web component redirected
+as needed. On loading the file `editor.html` the editor is created
+automatically full window (i.e. full size of the Web component view) and emits
+a signal once it is ready for being used.
+
+The integration of Wodo.CollabTextEditor with its environment, e.g. the message
+transport systems and the specific hosts to the editing sessions, is done by
+the JavaScript class `NativeBackedSessionBackend` in the file
+"resources/documentsharing/NativeBackedSessionBackend.js".
+To communicate from the Blink/Python code with the JavaScript world in the Web
+component, the bridging functionality provided by `QWebView` is used, where
+objects from outside the web component can be exposed with their defined API in
+the JavaScript world in the web component.
+Two objects are used for that: an instance of `JSBridge` for wiring up with the
+instance of the Wodo.CollabTextEditor class, as well as the instance of one of
+the two possible subclasses of `BlinkWebODFSessionBackendBase`, for bridging to
+the `NativeBackedSessionBackend`. See "blink/documentsharing/webodfwidget.py":
+
+    self.page.mainFrame().addToJavaScriptWindowObject("QtBridgeObject", self.bridge)
+    self.page.mainFrame().addToJavaScriptWindowObject("NativeSessionBackend", self.sessionBackend)
+
+Wodo.CollabTextEditor is built around a server/client architecture. So at the
+host who shares a document an instance of the class `DocumentSharingLocalServer`
+is created for each document that is shared. This server instance then is
+connected both to the local editor and the remote editor, depending on the
+location of the editor by the different subclasses of
+`BlinkWebODFSessionBackendBase`: to the local editor via a
+`BlinkWebODFLocalSessionBackend` instance and to the remote editor via the
+stream to a `BlinkWebODFStreamSessionBackend` instance. The stream itself is
+represented at both sides by an instance of `DocumentSharingStream`.
+
+    DocumentSharingLocalServer  <--> BlinkWebODFLocalSessionBackend <--> WebODFWidget
+                             ^-----> DocumentSharingStream (________() DocumentSharingStream <--> BlinkWebODFStreamSessionBackend <--> WebODFWidget
+
+The `DocumentSharingSessionItem` instance for a document-sharing session holds
+most of the needed instances of those classes: the `DocumentSharingStream`
+instance and either a `BlinkWebODFLocalSessionBackend` or a 
+`BlinkWebODFStreamSessionBackend` instance. The `DocumentSharingLocalServer`
+instance is currently an internal member of the
+`BlinkWebODFLocalSessionBackend` class.
+The respective `WebODFWidget` instance is provided by the central
+`DocumentsWindow` instance.
+
+
+## Classes used in the Documents window
+
+### WebODFWidget
+Holds the `QWebView` instance with `Wodo.CollabTextEditor`
+
+### DocumentWidget
+small wrapper around `WebODFWidget`, connects the `DocumentSharingSessionItem`
+instance with the `WebODFWidget` one
+possibly could be merged into `WebODFWidget`
+
+### DocumentSharingWidget
+ui-file based widget to show info about a document-sharing session
+
+### DocumentSharingSessionItem
+object that manages all of a document-sharing session
+* backend: `BlinkWebODFSessionBackendBase` subclass
+* stream: `DocumentSharingStream`
+* blink_session: `BlinkSession` from initial stream
+
+### DocumentSharingSessionModel
+a `QAbstractListModel` with all document-sharing sessions
+
+### DocumentSharingDelegate
+`QStyledItemDelegate` to render info about a document-sharing session
+
+### DocumentSharingListView
+`QListView` listing all existing sessions
+
+### DocumentsWindow
+* documentsharingsession_model: `DocumentSharingSessionModel`
+* ui:
+  * tab_widget: stack of document-sharing views (`DocumentWidget`s)
+  * documentsharing_list: `DocumentSharingListView`
+  * session_widget: showing info about currently shown document-sharing session
+  * control_button: actions for the currently shown document-sharing session
+

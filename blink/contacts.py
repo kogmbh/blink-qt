@@ -3052,6 +3052,7 @@ class ContactListView(QListView):
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
         self.actions.request_screen = QAction("Request Screen", self, triggered=self._AH_RequestScreen)
         self.actions.share_my_screen = QAction("Share My Screen", self, triggered=self._AH_ShareMyScreen)
+        self.actions.share_document = QAction("Share Document", self, triggered=self._AH_ShareDocument)
         self.drop_indicator_index = QModelIndex()
         self.needs_restore = False
         self.doubleClicked.connect(self._SH_DoubleClicked) # activated is emitted on single click
@@ -3124,6 +3125,7 @@ class ContactListView(QListView):
             menu.addAction(self.actions.send_files)
             menu.addAction(self.actions.request_screen)
             menu.addAction(self.actions.share_my_screen)
+            menu.addAction(self.actions.share_document)
             menu.addSeparator()
             menu.addAction(self.actions.add_group)
             menu.addAction(self.actions.add_contact)
@@ -3140,6 +3142,7 @@ class ContactListView(QListView):
             self.actions.send_files.setEnabled(default_account is not None)
             self.actions.request_screen.setEnabled(default_account is not None)
             self.actions.share_my_screen.setEnabled(default_account is not None)
+            self.actions.share_document.setEnabled(default_account is not None)
             self.actions.edit_item.setEnabled(contact.editable)
             self.actions.delete_item.setEnabled(contact.deletable)
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
@@ -3384,6 +3387,15 @@ class ContactListView(QListView):
         session_manager = SessionManager()
         session_manager.create_session(contact, contact.uri, [StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
 
+    def _AH_ShareDocument(self):
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+
+        filename = QFileDialog.getOpenFileName(self, "Share a Document", "", "OpenDocument Files (*.odt)")
+
+        if filename:
+            session_manager = SessionManager()
+            session_manager.create_session(contact, contact.uri, [StreamDescription('document-sharing', filename=filename)])
+
     def _DH_ApplicationXBlinkGroupList(self, event, index, rect, item):
         model = self.model()
         groups = model.items[GroupList]
@@ -3477,6 +3489,7 @@ class ContactSearchListView(QListView):
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
         self.actions.request_screen = QAction("Request Screen", self, triggered=self._AH_RequestScreen)
         self.actions.share_my_screen = QAction("Share My Screen", self, triggered=self._AH_ShareMyScreen)
+        self.actions.share_document = QAction("Share Document", self, triggered=self._AH_ShareDocument)
         self.drop_indicator_index = QModelIndex()
         self.doubleClicked.connect(self._SH_DoubleClicked) # activated is emitted on single click
 
@@ -3535,6 +3548,7 @@ class ContactSearchListView(QListView):
             menu.addAction(self.actions.send_files)
             menu.addAction(self.actions.request_screen)
             menu.addAction(self.actions.share_my_screen)
+            menu.addAction(self.actions.share_document)
             menu.addSeparator()
             menu.addAction(self.actions.edit_item)
             menu.addAction(self.actions.delete_item)
@@ -3729,6 +3743,15 @@ class ContactSearchListView(QListView):
         session_manager = SessionManager()
         session_manager.create_session(contact, contact.uri, [StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
 
+    def _AH_ShareDocument(self):
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+
+        filename = QFileDialog.getOpenFileName(self, "Share a Document", "", "OpenDocument Files (*.odt)")
+
+        if filename:
+            session_manager = SessionManager()
+            session_manager.create_session(contact, contact_uri, [StreamDescription('document-sharing', filename=filename)])
+
     def _DH_TextUriList(self, event, index, rect, item):
         if index.isValid():
             event.accept(rect)
@@ -3777,6 +3800,7 @@ class ContactDetailView(QListView):
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
         self.actions.request_screen = QAction("Request Screen", self, triggered=self._AH_RequestScreen)
         self.actions.share_my_screen = QAction("Share My Screen", self, triggered=self._AH_ShareMyScreen)
+        self.actions.share_document = QAction("Share Document", self, triggered=self._AH_ShareDocument)
         self.drop_indicator_index = QModelIndex()
         self.doubleClicked.connect(self._SH_DoubleClicked) # activated is emitted on single click
         contact_list.installEventFilter(self)
@@ -3824,6 +3848,7 @@ class ContactDetailView(QListView):
         menu.addAction(self.actions.send_files)
         menu.addAction(self.actions.request_screen)
         menu.addAction(self.actions.share_my_screen)
+        menu.addAction(self.actions.share_document)
         menu.addSeparator()
         if isinstance(selected_item, ContactURI) and model.contact_detail.editable:
             menu.addAction(self.actions.make_uri_default)
@@ -3837,6 +3862,7 @@ class ContactDetailView(QListView):
         self.actions.send_files.setEnabled(account_manager.default_account is not None and contact_has_uris)
         self.actions.request_screen.setEnabled(account_manager.default_account is not None and contact_has_uris)
         self.actions.share_my_screen.setEnabled(account_manager.default_account is not None and contact_has_uris)
+        self.actions.share_document.setEnabled(account_manager.default_account is not None and contact_has_uris)
         self.actions.edit_contact.setEnabled(model.contact_detail.editable)
         self.actions.delete_contact.setEnabled(model.contact_detail.deletable)
         menu.exec_(event.globalPos())
@@ -4001,6 +4027,21 @@ class ContactDetailView(QListView):
             selected_uri = contact.uri
         session_manager = SessionManager()
         session_manager.create_session(contact, selected_uri, [StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
+
+    def _AH_ShareDocument(self):
+        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        selected_indexes = self.selectionModel().selectedIndexes()
+        item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+        if isinstance(item, ContactURI):
+            selected_uri = item.uri
+        else:
+            selected_uri = contact.uri
+
+        filename = QFileDialog.getOpenFileName(self, "Share a Document", "", "OpenDocument Files (*.odt)")
+
+        if filename:
+            session_manager = SessionManager()
+            session_manager.create_session(contact, selected_uri, [StreamDescription('document-sharing', filename=filename)])
 
     def _DH_ApplicationXBlinkSession(self, event, index, rect, item):
         event.ignore(rect)
